@@ -81,21 +81,21 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900">
             {item ? 'Edit Content' : 'Create Content'}
           </h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3 sm:space-y-4">
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
               Name
@@ -223,7 +223,7 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label htmlFor="stage" className="block text-sm font-medium text-gray-700 mb-1">
                 Stage
@@ -281,7 +281,7 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
             </div>
           )}
 
-          <div className="flex gap-2 justify-between pt-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-0 sm:justify-between pt-3 sm:pt-4">
             <div>
               {item && onDelete && (
                 <>
@@ -289,7 +289,7 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
                     <button
                       type="button"
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"
+                      className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 w-full sm:w-auto"
                     >
                       Delete
                     </button>
@@ -297,7 +297,7 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
                     <button
                       type="button"
                       onClick={handleDelete}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                      className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 w-full sm:w-auto"
                     >
                       Confirm Delete
                     </button>
@@ -310,14 +310,14 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
                 {loading ? 'Saving...' : item ? 'Save changes' : 'Add content'}
               </button>

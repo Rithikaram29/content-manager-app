@@ -109,8 +109,8 @@ export function Dashboard() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <TopBar />
 
-      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <div className="flex-1 overflow-auto">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-2 sm:p-4 overflow-hidden">
+        <div className="flex-1 overflow-auto min-h-[50vh] lg:min-h-0">
           <Calendar
             items={filteredItems}
             onItemClick={handleItemClick}
@@ -119,17 +119,20 @@ export function Dashboard() {
           />
         </div>
 
-        <div className="w-80 flex flex-col gap-4 overflow-hidden">
-          <CategoriesPanel
-            categories={categories}
-            selectedCategoryId={selectedCategoryId}
-            onSelectCategory={setSelectedCategoryId}
-            onCreateCategory={handleCreateCategory}
-          />
+        <div className="w-full lg:w-80 flex flex-col sm:flex-row lg:flex-col gap-4 overflow-hidden">
+          <div className="sm:flex-1 lg:flex-none">
+            <CategoriesPanel
+              categories={categories}
+              selectedCategoryId={selectedCategoryId}
+              onSelectCategory={setSelectedCategoryId}
+              onCreateCategory={handleCreateCategory}
+            />
+          </div>
 
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 sm:flex-1">
             <BacklogPanel
               items={backlogItems}
+              allItems={contentItems}
               onItemClick={handleItemClick}
               onCreateClick={handleCreateClick}
               onDragStart={setDraggedItem}
@@ -138,6 +141,11 @@ export function Dashboard() {
                 e.dataTransfer.dropEffect = 'move';
               }}
               onDrop={handleBacklogDrop}
+              onTouchDrop={(item) => {
+                if (item.scheduled_date) {
+                  updateContentItem(item.id, { scheduled_date: null });
+                }
+              }}
             />
           </div>
         </div>

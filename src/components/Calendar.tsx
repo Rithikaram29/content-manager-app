@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { ContentItemWithCategory, ContentStage } from '../lib/database.types';
 import { STAGE_COLORS } from './ContentCard';
 
@@ -21,6 +21,149 @@ const STAGE_TIMELINE_COLORS: Record<ContentStage, string> = {
 
 export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const calendarRef = useRef<HTMLDivElement>(null);
+
+  // Handle touch drop events
+  useEffect(() => {
+    const handleTouchDrop = (e: CustomEvent<{ date: string; itemId: string }>) => {
+      const { date, itemId } = e.detail;
+      const item = items.find((i) => i.id === itemId);
+      if (item) {
+        // Check if it's a past date
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dropDate = new Date(date);
+        if (dropDate >= today) {
+          onDateDrop(date, item);
+        }
+      }
+    };
+
+    const calendarEl = calendarRef.current;
+    if (calendarEl) {
+      calendarEl.addEventListener('touchDrop', handleTouchDrop as EventListener);
+    }
+
+    return () => {
+      if (calendarEl) {
+        calendarEl.removeEventListener('touchDrop', handleTouchDrop as EventListener);
+      }
+    };
+  }, [items, onDateDrop]);
+
+  // Touch handlers for calendar items
+  const touchStartRef = useRef<{ x: number; y: number; item: ContentItemWithCategory } | null>(null);
+  const isDraggingRef = useRef(false);
+  const dragCloneRef = useRef<HTMLElement | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const createDragClone = useCallback((element: HTMLElement, x: number, y: number) => {
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.id = 'touch-drag-clone';
+    clone.style.position = 'fixed';
+    clone.style.left = `${x - 40}px`;
+    clone.style.top = `${y - 20}px`;
+    clone.style.width = `${Math.max(element.offsetWidth, 80)}px`;
+    clone.style.opacity = '0.9';
+    clone.style.zIndex = '9999';
+    clone.style.pointerEvents = 'none';
+    clone.style.transform = 'rotate(3deg) scale(1.05)';
+    clone.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)';
+    document.body.appendChild(clone);
+    return clone;
+  }, []);
+
+  const removeDragClone = useCallback(() => {
+    if (dragCloneRef.current) {
+      dragCloneRef.current.remove();
+      dragCloneRef.current = null;
+    }
+    const existingClone = document.getElementById('touch-drag-clone');
+    if (existingClone) existingClone.remove();
+  }, []);
+
+  const handleItemTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>, item: ContentItemWithCategory) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, item };
+
+    longPressTimerRef.current = setTimeout(() => {
+      isDraggingRef.current = true;
+      const target = e.currentTarget;
+      dragCloneRef.current = createDragClone(target, touch.clientX, touch.clientY);
+      target.style.opacity = '0.4';
+      if (navigator.vibrate) navigator.vibrate(50);
+      onDragStart(item);
+    }, 200);
+  }, [createDragClone, onDragStart]);
+
+  const handleItemTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y);
+
+    if (!isDraggingRef.current && (deltaX > 10 || deltaY > 10)) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (isDraggingRef.current && dragCloneRef.current) {
+      e.preventDefault();
+      dragCloneRef.current.style.left = `${touch.clientX - 40}px`;
+      dragCloneRef.current.style.top = `${touch.clientY - 20}px`;
+    }
+  }, []);
+
+  const handleItemTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    e.currentTarget.style.opacity = '1';
+
+    if (isDraggingRef.current && touchStartRef.current) {
+      const touch = e.changedTouches[0];
+      removeDragClone();
+
+      const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+      const calendarCell = elementBelow?.closest('[data-calendar-date]');
+      const backlogPanel = elementBelow?.closest('[data-backlog-drop]');
+
+      if (calendarCell) {
+        const date = calendarCell.getAttribute('data-calendar-date');
+        if (date) {
+          const event = new CustomEvent('touchDrop', {
+            detail: { date, itemId: touchStartRef.current.item.id },
+            bubbles: true
+          });
+          calendarCell.dispatchEvent(event);
+        }
+      } else if (backlogPanel) {
+        const event = new CustomEvent('touchDropBacklog', {
+          detail: { itemId: touchStartRef.current.item.id },
+          bubbles: true
+        });
+        backlogPanel.dispatchEvent(event);
+      }
+
+      isDraggingRef.current = false;
+    }
+    touchStartRef.current = null;
+  }, [removeDragClone]);
+
+  const handleItemTouchCancel = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    e.currentTarget.style.opacity = '1';
+    removeDragClone();
+    isDraggingRef.current = false;
+    touchStartRef.current = null;
+  }, [removeDragClone]);
 
   const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
@@ -132,37 +275,38 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
+    <div ref={calendarRef} className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
+      <div className="px-2 sm:px-4 py-2 sm:py-3 border-b border-gray-200 flex items-center justify-between">
+        <h2 className="text-sm sm:text-lg font-semibold text-gray-900">
           {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-1 sm:gap-2">
           <button
             onClick={prevMonth}
             className="p-1 hover:bg-gray-100 rounded"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           <button
             onClick={nextMonth}
             className="p-1 hover:bg-gray-100 rounded"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 p-4 overflow-auto">
-        <div className="grid grid-cols-7 gap-2 mb-2">
+      <div className="flex-1 p-2 sm:p-4 overflow-auto">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1 sm:mb-2 min-w-[500px]">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-            <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
-              {day}
+            <div key={day} className="text-center text-xs sm:text-sm font-medium text-gray-600 py-1 sm:py-2">
+              <span className="hidden sm:inline">{day}</span>
+              <span className="sm:hidden">{day.charAt(0)}</span>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-2 auto-rows-fr">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 auto-rows-fr min-w-[500px]">
           {weeks.map((week, weekIndex) =>
             week.map((day, dayIndex) => {
               const dateStr = day ? getDateString(day) : '';
@@ -178,7 +322,8 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
               return (
                 <div
                   key={`${weekIndex}-${dayIndex}`}
-                  className={`min-h-[120px] border border-gray-200 rounded-lg p-2 ${
+                  data-calendar-date={day ? dateStr : undefined}
+                  className={`min-h-[80px] sm:min-h-[120px] border border-gray-200 rounded sm:rounded-lg p-1 sm:p-2 ${
                     !day ? 'bg-gray-50' : isPast ? 'bg-gray-100 opacity-60' : isToday ? 'bg-gray-200' : 'bg-white hover:bg-gray-50'
                   }`}
                   onDragOver={(e) => handleDragOver(e, day)}
@@ -186,13 +331,13 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
                 >
                   {day && (
                     <>
-                      <div className="text-sm font-medium text-gray-900 mb-2">{day}</div>
+                      <div className="text-xs sm:text-sm font-medium text-gray-900 mb-1 sm:mb-2">{day}</div>
 
-                      <div className="space-y-1">
+                      <div className="space-y-0.5 sm:space-y-1">
                         {timelines.map(({ item }, idx) => (
                           <div
                             key={`timeline-${item.id}-${idx}`}
-                            className={`h-2 rounded ${STAGE_TIMELINE_COLORS[item.stage]}`}
+                            className={`h-1.5 sm:h-2 rounded ${STAGE_TIMELINE_COLORS[item.stage]}`}
                             title={`${item.name} - ${item.stage}`}
                           />
                         ))}
@@ -206,13 +351,17 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
                               e.dataTransfer.setData('application/json', item.id);
                               onDragStart(item);
                             }}
+                            onTouchStart={(e) => handleItemTouchStart(e, item)}
+                            onTouchMove={handleItemTouchMove}
+                            onTouchEnd={handleItemTouchEnd}
+                            onTouchCancel={handleItemTouchCancel}
                             onClick={() => onItemClick(item)}
-                            className={`text-xs p-2 rounded cursor-pointer ${
+                            className={`text-[10px] sm:text-xs p-1 sm:p-2 rounded cursor-pointer touch-manipulation select-none ${
                               STAGE_COLORS[item.stage].split(' ')[0]
                             } border border-gray-300`}
                           >
                             <div className="font-medium truncate">{item.name}</div>
-                            <div className="text-gray-600">{item.social}</div>
+                            <div className="text-gray-600 hidden sm:block">{item.social}</div>
                           </div>
                         ))}
                       </div>

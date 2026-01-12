@@ -1,10 +1,12 @@
 import type { ContentItemWithCategory, ContentStage } from '../lib/database.types';
+import { useTouchDragDrop } from '../hooks/useTouchDragDrop';
 
 interface ContentCardProps {
   item: ContentItemWithCategory;
   onClick: () => void;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
+  onTouchDragStart?: (item: ContentItemWithCategory) => void;
 }
 
 const STAGE_COLORS: Record<ContentStage, string> = {
@@ -23,26 +25,32 @@ const SOCIAL_COLORS = {
   Shorts: 'bg-teal-100 text-teal-700'
 };
 
-export function ContentCard({ item, onClick, draggable = false, onDragStart }: ContentCardProps) {
+export function ContentCard({ item, onClick, draggable = false, onDragStart, onTouchDragStart }: ContentCardProps) {
+  const { touchHandlers } = useTouchDragDrop({
+    onDragStart: onTouchDragStart,
+    item,
+  });
+
   return (
     <div
       draggable={draggable}
       onDragStart={onDragStart}
       onClick={onClick}
-      className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow"
+      {...(draggable ? touchHandlers : {})}
+      className="bg-white border border-gray-200 rounded-lg p-2 sm:p-3 cursor-pointer hover:shadow-md transition-shadow touch-manipulation select-none"
     >
-      <h3 className="font-medium text-gray-900 mb-2 truncate">{item.name}</h3>
+      <h3 className="font-medium text-gray-900 mb-1.5 sm:mb-2 truncate text-sm sm:text-base">{item.name}</h3>
 
-      <div className="flex flex-wrap gap-2 mb-2">
-        <span className={`px-2 py-1 rounded text-xs font-medium ${STAGE_COLORS[item.stage]}`}>
+      <div className="flex flex-wrap gap-1 sm:gap-2 mb-1.5 sm:mb-2">
+        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium ${STAGE_COLORS[item.stage]}`}>
           {item.stage}
         </span>
-        <span className={`px-2 py-1 rounded text-xs font-medium ${SOCIAL_COLORS[item.social]}`}>
+        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium ${SOCIAL_COLORS[item.social]}`}>
           {item.social}
         </span>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-600">
+      <div className="flex items-center justify-between text-[10px] sm:text-xs text-gray-600">
         <span className="truncate">{item.category.name}</span>
         <span className="ml-2 whitespace-nowrap">{item.timeline_days}d</span>
       </div>
