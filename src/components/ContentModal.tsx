@@ -22,7 +22,7 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
   const [finalUrl, setFinalUrl] = useState(item?.final_url || '');
   const [stage, setStage] = useState<ContentStage>(item?.stage || 'Idea');
   const [social, setSocial] = useState<SocialPlatform>(item?.social || 'IG');
-  const [timelineDays, setTimelineDays] = useState(item?.timeline_days || 1);
+  const [timelineDays, setTimelineDays] = useState(String(item?.timeline_days || 1));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -49,7 +49,7 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
         final_url: finalUrl.trim() || null,
         stage,
         social,
-        timeline_days: timelineDays,
+        timeline_days: parseInt(timelineDays) || 1,
         scheduled_date: item?.scheduled_date || null
       };
 
@@ -270,7 +270,8 @@ export function ContentModal({ item, categories, onSave, onUpdate, onDelete, onC
               type="number"
               min="1"
               value={timelineDays}
-              onChange={(e) => setTimelineDays(parseInt(e.target.value) || 1)}
+              onChange={(e) => setTimelineDays(e.target.value)}
+              placeholder="1"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

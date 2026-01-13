@@ -6,24 +6,46 @@ interface UseTouchDragDropProps {
   item: ContentItemWithCategory;
 }
 
+// Global state for touch drag
+interface TouchDragState {
+  itemId: string | null;
+  item: ContentItemWithCategory | null;
+}
+
+declare global {
+  interface Window {
+    __touchDragState?: TouchDragState;
+  }
+}
+
 export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
   const dragClone = useRef<HTMLElement | null>(null);
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const originalElement = useRef<HTMLElement | null>(null);
+  const didDrag = useRef(false);
 
   const createDragClone = useCallback((element: HTMLElement, x: number, y: number) => {
+    // Remove any existing clone first
+    const existingClone = document.getElementById('touch-drag-clone');
+    if (existingClone) existingClone.remove();
+
     const clone = element.cloneNode(true) as HTMLElement;
     clone.id = 'touch-drag-clone';
-    clone.style.position = 'fixed';
-    clone.style.left = `${x - 50}px`;
-    clone.style.top = `${y - 30}px`;
-    clone.style.width = `${element.offsetWidth}px`;
-    clone.style.opacity = '0.9';
-    clone.style.zIndex = '9999';
-    clone.style.pointerEvents = 'none';
-    clone.style.transform = 'rotate(3deg) scale(1.05)';
-    clone.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)';
+    clone.style.cssText = `
+      position: fixed;
+      left: ${x - 50}px;
+      top: ${y - 30}px;
+      width: ${Math.max(element.offsetWidth, 120)}px;
+      opacity: 0.9;
+      z-index: 9999;
+      pointer-events: none;
+      transform: rotate(3deg) scale(1.05);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      background: white;
+      border-radius: 8px;
+    `;
     document.body.appendChild(clone);
     return clone;
   }, []);
@@ -33,29 +55,48 @@ export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
       dragClone.current.remove();
       dragClone.current = null;
     }
-    // Also remove any orphaned clones
     const existingClone = document.getElementById('touch-drag-clone');
-    if (existingClone) {
-      existingClone.remove();
-    }
+    if (existingClone) existingClone.remove();
   }, []);
+
+  const cleanup = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    if (originalElement.current) {
+      originalElement.current.style.opacity = '1';
+      originalElement.current = null;
+    }
+    removeDragClone();
+    document.body.classList.remove('dragging');
+    isDragging.current = false;
+    touchStartPos.current = null;
+    window.__touchDragState = { itemId: null, item: null };
+  }, [removeDragClone]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     const touch = e.touches[0];
+    const target = e.currentTarget;
+
     touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    originalElement.current = target;
+    didDrag.current = false;
 
-    // Use long press to initiate drag (300ms)
+    // Long press to initiate drag
     longPressTimer.current = setTimeout(() => {
+      if (!originalElement.current) return;
+
       isDragging.current = true;
-      const target = e.currentTarget;
-      dragClone.current = createDragClone(target, touch.clientX, touch.clientY);
+      didDrag.current = true;
+      dragClone.current = createDragClone(originalElement.current, touch.clientX, touch.clientY);
 
-      // Store the dragged item ID in a global variable for drop detection
-      (window as any).__touchDragItemId = item.id;
-      (window as any).__touchDragItem = item;
+      // Store drag state globally
+      window.__touchDragState = { itemId: item.id, item };
 
-      // Add visual feedback to original element
-      target.style.opacity = '0.4';
+      // Visual feedback
+      originalElement.current.style.opacity = '0.4';
+      document.body.classList.add('dragging');
 
       // Vibrate if available
       if (navigator.vibrate) {
@@ -63,7 +104,7 @@ export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
       }
 
       onDragStart?.(item);
-    }, 200);
+    }, 250);
   }, [createDragClone, item, onDragStart]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -73,7 +114,7 @@ export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
     const deltaX = Math.abs(touch.clientX - touchStartPos.current.x);
     const deltaY = Math.abs(touch.clientY - touchStartPos.current.y);
 
-    // If moved significantly before long press, cancel the drag initiation
+    // If moved significantly before long press, cancel drag initiation
     if (!isDragging.current && (deltaX > 10 || deltaY > 10)) {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
@@ -84,37 +125,35 @@ export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
 
     if (isDragging.current && dragClone.current) {
       e.preventDefault();
+      e.stopPropagation();
       dragClone.current.style.left = `${touch.clientX - 50}px`;
       dragClone.current.style.top = `${touch.clientY - 30}px`;
     }
   }, []);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    // Clear long press timer
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
 
-    // Restore original element opacity
-    e.currentTarget.style.opacity = '1';
-
     if (isDragging.current) {
+      e.preventDefault();
+      e.stopPropagation();
+
       const touch = e.changedTouches[0];
 
-      // Find drop target under touch point
+      // Remove clone before finding element below
       removeDragClone();
 
+      // Find drop target
       const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-
-      // Find calendar cell or backlog panel
       const calendarCell = elementBelow?.closest('[data-calendar-date]');
       const backlogPanel = elementBelow?.closest('[data-backlog-drop]');
 
       if (calendarCell) {
         const date = calendarCell.getAttribute('data-calendar-date');
         if (date) {
-          // Dispatch custom event for calendar drop
           const event = new CustomEvent('touchDrop', {
             detail: { date, itemId: item.id },
             bubbles: true
@@ -122,36 +161,38 @@ export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
           calendarCell.dispatchEvent(event);
         }
       } else if (backlogPanel) {
-        // Dispatch custom event for backlog drop
         const event = new CustomEvent('touchDropBacklog', {
           detail: { itemId: item.id },
           bubbles: true
         });
         backlogPanel.dispatchEvent(event);
       }
-
-      // Cleanup
-      (window as any).__touchDragItemId = null;
-      (window as any).__touchDragItem = null;
-      isDragging.current = false;
     }
 
-    touchStartPos.current = null;
-  }, [item.id, removeDragClone]);
-
-  const handleTouchCancel = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+    // Restore original element
+    if (originalElement.current) {
+      originalElement.current.style.opacity = '1';
+      originalElement.current = null;
     }
 
-    e.currentTarget.style.opacity = '1';
-    removeDragClone();
+    document.body.classList.remove('dragging');
     isDragging.current = false;
     touchStartPos.current = null;
-    (window as any).__touchDragItemId = null;
-    (window as any).__touchDragItem = null;
-  }, [removeDragClone]);
+    window.__touchDragState = { itemId: null, item: null };
+  }, [item.id, removeDragClone]);
+
+  const handleTouchCancel = useCallback(() => {
+    cleanup();
+  }, [cleanup]);
+
+  // Prevent click if we just dragged
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (didDrag.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      didDrag.current = false;
+    }
+  }, []);
 
   return {
     touchHandlers: {
@@ -160,5 +201,7 @@ export function useTouchDragDrop({ onDragStart, item }: UseTouchDragDropProps) {
       onTouchEnd: handleTouchEnd,
       onTouchCancel: handleTouchCancel,
     },
+    handleClick,
+    isDragging: isDragging.current,
   };
 }

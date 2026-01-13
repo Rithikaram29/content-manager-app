@@ -26,16 +26,24 @@ const SOCIAL_COLORS = {
 };
 
 export function ContentCard({ item, onClick, draggable = false, onDragStart, onTouchDragStart }: ContentCardProps) {
-  const { touchHandlers } = useTouchDragDrop({
+  const { touchHandlers, handleClick } = useTouchDragDrop({
     onDragStart: onTouchDragStart,
     item,
   });
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // If handleClick returns (didn't prevent), call onClick
+    handleClick(e);
+    if (!e.defaultPrevented) {
+      onClick();
+    }
+  };
 
   return (
     <div
       draggable={draggable}
       onDragStart={onDragStart}
-      onClick={onClick}
+      onClick={draggable ? handleCardClick : onClick}
       {...(draggable ? touchHandlers : {})}
       className="bg-white border border-gray-200 rounded-lg p-2 sm:p-3 cursor-pointer hover:shadow-md transition-shadow touch-manipulation select-none"
     >

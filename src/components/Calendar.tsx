@@ -52,23 +52,31 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
   }, [items, onDateDrop]);
 
   // Touch handlers for calendar items
-  const touchStartRef = useRef<{ x: number; y: number; item: ContentItemWithCategory } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; item: ContentItemWithCategory; element: HTMLElement } | null>(null);
   const isDraggingRef = useRef(false);
   const dragCloneRef = useRef<HTMLElement | null>(null);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didDragRef = useRef(false);
 
   const createDragClone = useCallback((element: HTMLElement, x: number, y: number) => {
+    const existingClone = document.getElementById('touch-drag-clone');
+    if (existingClone) existingClone.remove();
+
     const clone = element.cloneNode(true) as HTMLElement;
     clone.id = 'touch-drag-clone';
-    clone.style.position = 'fixed';
-    clone.style.left = `${x - 40}px`;
-    clone.style.top = `${y - 20}px`;
-    clone.style.width = `${Math.max(element.offsetWidth, 80)}px`;
-    clone.style.opacity = '0.9';
-    clone.style.zIndex = '9999';
-    clone.style.pointerEvents = 'none';
-    clone.style.transform = 'rotate(3deg) scale(1.05)';
-    clone.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)';
+    clone.style.cssText = `
+      position: fixed;
+      left: ${x - 40}px;
+      top: ${y - 20}px;
+      width: ${Math.max(element.offsetWidth, 80)}px;
+      opacity: 0.9;
+      z-index: 9999;
+      pointer-events: none;
+      transform: rotate(3deg) scale(1.05);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      background: white;
+      border-radius: 4px;
+    `;
     document.body.appendChild(clone);
     return clone;
   }, []);
@@ -84,16 +92,21 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
 
   const handleItemTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>, item: ContentItemWithCategory) => {
     const touch = e.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY, item };
+    const element = e.currentTarget;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, item, element };
+    didDragRef.current = false;
 
     longPressTimerRef.current = setTimeout(() => {
+      if (!touchStartRef.current) return;
+
       isDraggingRef.current = true;
-      const target = e.currentTarget;
-      dragCloneRef.current = createDragClone(target, touch.clientX, touch.clientY);
-      target.style.opacity = '0.4';
+      didDragRef.current = true;
+      dragCloneRef.current = createDragClone(touchStartRef.current.element, touch.clientX, touch.clientY);
+      touchStartRef.current.element.style.opacity = '0.4';
+      document.body.classList.add('dragging');
       if (navigator.vibrate) navigator.vibrate(50);
       onDragStart(item);
-    }, 200);
+    }, 250);
   }, [createDragClone, onDragStart]);
 
   const handleItemTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -112,6 +125,7 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
 
     if (isDraggingRef.current && dragCloneRef.current) {
       e.preventDefault();
+      e.stopPropagation();
       dragCloneRef.current.style.left = `${touch.clientX - 40}px`;
       dragCloneRef.current.style.top = `${touch.clientY - 20}px`;
     }
@@ -122,9 +136,11 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-    e.currentTarget.style.opacity = '1';
 
     if (isDraggingRef.current && touchStartRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+
       const touch = e.changedTouches[0];
       removeDragClone();
 
@@ -148,22 +164,41 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
         });
         backlogPanel.dispatchEvent(event);
       }
-
-      isDraggingRef.current = false;
     }
+
+    // Restore original element
+    if (touchStartRef.current?.element) {
+      touchStartRef.current.element.style.opacity = '1';
+    }
+
+    document.body.classList.remove('dragging');
+    isDraggingRef.current = false;
     touchStartRef.current = null;
   }, [removeDragClone]);
 
-  const handleItemTouchCancel = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+  const handleItemTouchCancel = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-    e.currentTarget.style.opacity = '1';
+    if (touchStartRef.current?.element) {
+      touchStartRef.current.element.style.opacity = '1';
+    }
     removeDragClone();
+    document.body.classList.remove('dragging');
     isDraggingRef.current = false;
     touchStartRef.current = null;
   }, [removeDragClone]);
+
+  const handleItemClick = useCallback((e: React.MouseEvent, item: ContentItemWithCategory) => {
+    if (didDragRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      didDragRef.current = false;
+      return;
+    }
+    onItemClick(item);
+  }, [onItemClick]);
 
   const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
@@ -355,7 +390,7 @@ export function Calendar({ items, onItemClick, onDateDrop, onDragStart }: Calend
                             onTouchMove={handleItemTouchMove}
                             onTouchEnd={handleItemTouchEnd}
                             onTouchCancel={handleItemTouchCancel}
-                            onClick={() => onItemClick(item)}
+                            onClick={(e) => handleItemClick(e, item)}
                             className={`text-[10px] sm:text-xs p-1 sm:p-2 rounded cursor-pointer touch-manipulation select-none ${
                               STAGE_COLORS[item.stage].split(' ')[0]
                             } border border-gray-300`}

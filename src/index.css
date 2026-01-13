@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Touch drag and drop styles */
+.touch-manipulation {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Prevent pull-to-refresh on drag */
+body.dragging {
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+/* Clone styling */
+#touch-drag-clone {
+  touch-action: none;
+  pointer-events: none;
+}
